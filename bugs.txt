@@ -1,0 +1,2 @@
+1. BUG: Santa dies by hitting his bag if multiple input keys are pressed at the same time.
+   HOW TO REPRODUCE: Move from right to left with a single bag and press W + D at same time.
