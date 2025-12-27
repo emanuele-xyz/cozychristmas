@@ -865,22 +865,21 @@ public:
 
                 if (should_render)
                 {
+                    SDL_RendererFlip horizontal_flip = SDL_FLIP_NONE;
                     if (m_game_state.cur_tick_direction == DIRECTION_EAST &&
                         m_game_state.map[row][col].type == TILE_BAG)
                     {
-                        SDL_RenderCopyEx(
-                            m_renderer,
-                            m_sprite_sheet,
-                            &src_rect,
-                            &dst_rect,
-                            0.0,
-                            NULL,
-                            SDL_FLIP_HORIZONTAL);
+                        horizontal_flip = SDL_FLIP_HORIZONTAL;
                     }
-                    else
-                    {
-                        SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
-                    }
+
+                    SDL_RenderCopyEx(
+                        m_renderer,
+                        m_sprite_sheet,
+                        &src_rect,
+                        &dst_rect,
+                        0.0,
+                        NULL,
+                        horizontal_flip);
                 }
             }
         }
@@ -899,21 +898,20 @@ public:
             src_rect.w = TILE_PIXEL_SIZE;
             src_rect.h = TILE_PIXEL_SIZE;
 
+            SDL_RendererFlip horizontal_flip = SDL_FLIP_NONE;
             if (m_game_state.cur_tick_direction == DIRECTION_EAST)
             {
-                SDL_RenderCopyEx(
-                    m_renderer,
-                    m_sprite_sheet,
-                    &src_rect,
-                    &dst_rect,
-                    0.0,
-                    NULL,
-                    SDL_FLIP_HORIZONTAL);
+                horizontal_flip = SDL_FLIP_HORIZONTAL;
             }
-            else
-            {
-                SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
-            }
+
+            SDL_RenderCopyEx(
+                m_renderer,
+                m_sprite_sheet,
+                &src_rect,
+                &dst_rect,
+                0.0,
+                NULL,
+                horizontal_flip);
         }
 
         // TODO: render ui
