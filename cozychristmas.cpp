@@ -130,7 +130,8 @@ static int mod(int a, int b)
 struct GameState
 {
     Tile map[MAP_SIDE][MAP_SIDE]{};
-    Direction santa_direction;
+    Direction prev_tick_direction; // Santa's direction at the previous tick
+    Direction cur_tick_direction;  // Santa's direction at the current tick
     v2 santa;
     int num_bags;
     v2 first_bag;
@@ -157,11 +158,14 @@ static void init_game_state(GameState &)
 
 static void update_game_state(GameState &state, const SoundEffects &sfx)
 {
+    // update previous tick direction
+    state.prev_tick_direction = state.cur_tick_direction;
+
     // save old santa position for later
     v2 old_santa{state.santa};
 
     // move santa
-    switch (state.santa_direction)
+    switch (state.cur_tick_direction)
     {
     case DIRECTION_NORTH:
     {
@@ -381,7 +385,7 @@ static void entry()
                 std::cout << "\n";
             }
 
-            std::cout << "direction: " << direction_to_str(game_state.santa_direction) << '\n';
+            std::cout << "direction: " << direction_to_str(game_state.cur_tick_direction) << '\n';
             std::cout << "Santa: " << game_state.santa.row << ',' << game_state.santa.col << '\n';
             std::cout << "Bags: " << game_state.num_bags << '\n';
             std::cout << "First bag: " << game_state.first_bag.row << ',' << game_state.first_bag.col << '\n';
@@ -425,7 +429,7 @@ static void entry()
         }
 
         // update game state with new direct
-        game_state.santa_direction = direction;
+        game_state.cur_tick_direction = direction;
 
         // update game state
         update_game_state(game_state);
@@ -751,33 +755,33 @@ public:
             if (keyboard[SDL_SCANCODE_W] || keyboard[SDL_SCANCODE_UP])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.santa_direction == DIRECTION_SOUTH && m_game_state.num_bags > 0))
+                if (!(m_game_state.prev_tick_direction == DIRECTION_SOUTH && m_game_state.num_bags > 0))
                 {
-                    m_game_state.santa_direction = DIRECTION_NORTH;
+                    m_game_state.cur_tick_direction = DIRECTION_NORTH;
                 }
             }
             if (keyboard[SDL_SCANCODE_S] || keyboard[SDL_SCANCODE_DOWN])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.santa_direction == DIRECTION_NORTH && m_game_state.num_bags > 0))
+                if (!(m_game_state.prev_tick_direction == DIRECTION_NORTH && m_game_state.num_bags > 0))
                 {
-                    m_game_state.santa_direction = DIRECTION_SOUTH;
+                    m_game_state.cur_tick_direction = DIRECTION_SOUTH;
                 }
             }
             if (keyboard[SDL_SCANCODE_A] || keyboard[SDL_SCANCODE_LEFT])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.santa_direction == DIRECTION_EAST && m_game_state.num_bags > 0))
+                if (!(m_game_state.prev_tick_direction == DIRECTION_EAST && m_game_state.num_bags > 0))
                 {
-                    m_game_state.santa_direction = DIRECTION_WEST;
+                    m_game_state.cur_tick_direction = DIRECTION_WEST;
                 }
             }
             if (keyboard[SDL_SCANCODE_D] || keyboard[SDL_SCANCODE_RIGHT])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.santa_direction == DIRECTION_WEST && m_game_state.num_bags > 0))
+                if (!(m_game_state.prev_tick_direction == DIRECTION_WEST && m_game_state.num_bags > 0))
                 {
-                    m_game_state.santa_direction = DIRECTION_EAST;
+                    m_game_state.cur_tick_direction = DIRECTION_EAST;
                 }
             }
         }
@@ -861,7 +865,7 @@ public:
 
                 if (should_render)
                 {
-                    if (m_game_state.santa_direction == DIRECTION_EAST &&
+                    if (m_game_state.cur_tick_direction == DIRECTION_EAST &&
                         m_game_state.map[row][col].type == TILE_BAG)
                     {
                         SDL_RenderCopyEx(
@@ -895,7 +899,7 @@ public:
             src_rect.w = TILE_PIXEL_SIZE;
             src_rect.h = TILE_PIXEL_SIZE;
 
-            if (m_game_state.santa_direction == DIRECTION_EAST)
+            if (m_game_state.cur_tick_direction == DIRECTION_EAST)
             {
                 SDL_RenderCopyEx(
                     m_renderer,
