@@ -710,7 +710,7 @@ public:
         }
 
         constexpr int cozy_christmas_w{109};
-        constexpr int cozy_christmas_h{43};
+        constexpr int cozy_christmas_h{44};
 
         SDL_Rect dst_rect{};
         dst_rect.x = (LOGICAL_SCREEN_W / 2) - (cozy_christmas_w / 2);
