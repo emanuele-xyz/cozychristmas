@@ -136,14 +136,13 @@ struct GameState
     int num_bags;
     v2 first_bag;
     v2 last_bag;
-    bool game_over{true};
-    bool exit;
     double spawn_time_sec{SPAWN_TIME_SEC_START};
     double spawn_timer{};
 };
 
 struct SoundEffects
 {
+    Mix_Chunk *start;
     Mix_Chunk *gift;
     Mix_Chunk *house;
     Mix_Chunk *hurt;
@@ -151,13 +150,16 @@ struct SoundEffects
     Mix_Chunk *spawn;
 };
 
-static void init_game_state(GameState &)
+static void init_game_state(GameState &state)
 {
     // TODO: default initialize map, direction, santa, num_bags, first_bag, last_bag, spwan time sec, spwan timer
+    state = GameState{};
 }
 
-static void update_game_state(GameState &state, const SoundEffects &sfx)
+static bool update_game_state(GameState &state, const SoundEffects &sfx)
 {
+    bool game_over{false};
+
     // update previous tick direction
     state.prev_tick_direction = state.cur_tick_direction;
 
@@ -249,14 +251,14 @@ static void update_game_state(GameState &state, const SoundEffects &sfx)
     break;
     case TILE_BAG:
     {
-        state.game_over = true;
+        game_over = true;
     }
     break;
     case TILE_HOUSE:
     {
         if (state.num_bags <= 0)
         {
-            state.game_over = true;
+            game_over = true;
 
             // play hurt sound effect
             Mix_PlayChannel(-1, sfx.hurt, 0);
@@ -340,6 +342,8 @@ static void update_game_state(GameState &state, const SoundEffects &sfx)
         // reset timer
         state.spawn_timer = 0.0;
     }
+
+    return game_over;
 }
 
 #if 0
@@ -671,7 +675,7 @@ private:
 class IScene
 {
 public:
-    virtual void update(double dt_sec) = 0;
+    virtual bool update(double dt_sec) = 0;
     virtual void render() = 0;
 
 public:
@@ -690,8 +694,9 @@ public:
     GameOverScene &operator=(GameOverScene &&) noexcept = delete;
 
 public:
-    void update(double /*dt_sec*/) override
+    bool update(double /*dt_sec*/) override
     {
+        return true;
     }
     void render() override
     {
@@ -747,8 +752,10 @@ public:
     GameScene operator=(GameScene &&) noexcept = delete;
 
 public:
-    void update(double dt_sec) override
+    bool update(double dt_sec) override
     {
+        bool game_over{false};
+
         // update santa direction based on WASD or arrow keys
         {
             const Uint8 *keyboard{SDL_GetKeyboardState(nullptr)};
@@ -790,8 +797,7 @@ public:
         if (m_tick_timer >= SEC_PER_TICK)
         {
             // update game
-            update_game_state(m_game_state, m_sfx);
-
+            game_over = update_game_state(m_game_state, m_sfx);
             // reset timer
             m_tick_timer = 0.0;
         }
@@ -801,7 +807,10 @@ public:
 
         // update tick timer
         m_tick_timer += dt_sec;
+
+        return game_over;
     }
+
     void render() override
     {
         // clear the screen to black
@@ -944,6 +953,7 @@ entry()
 
     SDL2ExTexture sprite_sheet{renderer, "assets/cozychristmas.png"};
     SDL2ExMusic theme{"assets/theme.mp3"};
+    SDL2ExChunk start{"assets/start.wav"};
     SDL2ExChunk gift{"assets/gift.wav"};
     SDL2ExChunk house{"assets/house.wav"};
     SDL2ExChunk hurt{"assets/hurt.wav"};
@@ -963,10 +973,11 @@ entry()
         }
     }
 
+    bool should_exit{false};
     GameState game_state{};
     init_game_state(game_state);
 
-    SoundEffects sfx{gift.Handle(), house.Handle(), hurt.Handle(), step.Handle(), spawn.Handle()};
+    SoundEffects sfx{start.Handle(), gift.Handle(), house.Handle(), hurt.Handle(), step.Handle(), spawn.Handle()};
 
     // start playing music (loops: -1 = infinite)
     Mix_PlayMusic(theme.Handle(), -1);
@@ -978,7 +989,8 @@ entry()
     IScene *current_scene{&game_scene};
 
     Uint64 last_frame_start{SDL_GetPerformanceCounter()};
-    while (!game_state.exit)
+    bool game_over{true};
+    while (!should_exit)
     {
         // compute last frame delta time
         Uint64 this_frame_start{SDL_GetPerformanceCounter()};
@@ -994,7 +1006,7 @@ entry()
                 if (e.type == SDL_QUIT)
                 {
                     // user requests quit
-                    game_state.exit = true;
+                    should_exit = true;
                 }
                 else if (e.type == SDL_KEYDOWN)
                 {
@@ -1003,12 +1015,13 @@ entry()
                     {
                     case SDLK_RETURN:
                     {
-                        game_state.game_over = false; // TODO: not correct
+                        Mix_PlayChannel(-1, sfx.start, 0);
+                        game_over = false;
                     }
                     break;
                     case SDLK_ESCAPE:
                     {
-                        game_state.exit = true;
+                        should_exit = true;
                     }
                     break;
                     default:
@@ -1021,18 +1034,18 @@ entry()
         }
 
         // switch scene
-        if (game_state.game_over)
+        if (game_over)
         {
+            init_game_state(game_state);
             current_scene = &game_over_scene;
         }
         else
         {
-            init_game_state(game_state);
             current_scene = &game_scene;
         }
 
         // update scene
-        current_scene->update(dt_sec);
+        game_over = current_scene->update(dt_sec);
 
         // render scene
         current_scene->render();
