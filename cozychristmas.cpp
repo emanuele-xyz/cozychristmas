@@ -2,8 +2,8 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_mixer.h>
 
-#include <vector>
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <format>
@@ -12,13 +12,16 @@
 #include <stacktrace>
 #include <string>
 #include <stdexcept>
+#include <vector>
 
 constexpr int SCREEN_W{720};
 constexpr int SCREEN_H{720};
 constexpr int MAP_SIDE{8};
 constexpr int TILE_PIXEL_SIZE{14}; // TODO: find a better name
+constexpr int SCORE_PIXEL_PAD{1};
+constexpr int SCORE_PIXEL_HEIGHT{7};
 constexpr int LOGICAL_SCREEN_W{MAP_SIDE * TILE_PIXEL_SIZE};
-constexpr int LOGICAL_SCREEN_H{MAP_SIDE * TILE_PIXEL_SIZE};
+constexpr int LOGICAL_SCREEN_H{MAP_SIDE * TILE_PIXEL_SIZE + SCORE_PIXEL_PAD + SCORE_PIXEL_HEIGHT};
 constexpr double SPAWN_TIME_SEC_START{2.0};
 constexpr double SPAWN_TIME_DIFFICULTY_COEFFICIENT{0.01};
 constexpr double MIN_SPAWN_TIME_SEC{0.5};
@@ -136,6 +139,7 @@ struct GameState
     int num_bags;
     v2 first_bag;
     v2 last_bag;
+    int score;
     double spawn_time_sec{SPAWN_TIME_SEC_START};
     double spawn_timer{};
 };
@@ -292,6 +296,8 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
             }
             // decrease number of bags
             state.num_bags--;
+            // increase the number of successfully delivered gifts
+            state.score++;
 
             // play house sound effect
             Mix_PlayChannel(-1, sfx.house, 0);
@@ -923,7 +929,62 @@ public:
                 horizontal_flip);
         }
 
-        // TODO: render ui
+        // render score ui
+        {
+            SDL_Rect dst_rect{};
+
+            // render score header
+            {
+                dst_rect.x = 0;
+                dst_rect.y = MAP_SIDE * TILE_PIXEL_SIZE + SCORE_PIXEL_PAD;
+                dst_rect.w = 34;
+                dst_rect.h = SCORE_PIXEL_HEIGHT;
+
+                SDL_Rect src_rect{};
+                src_rect.x = 32;
+                src_rect.y = 1;
+                src_rect.w = 36;
+                src_rect.h = SCORE_PIXEL_HEIGHT;
+
+                SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
+            }
+
+            // render score digits, one by one
+            {
+                constexpr int PIXEL_ADVANCE{1};
+
+                std::array<SDL_Rect, 10> digit_src_rect{};
+                digit_src_rect[0] = SDL_Rect{.x = 69, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT};  // 0
+                digit_src_rect[1] = SDL_Rect{.x = 74, .y = 1, .w = 3, .h = SCORE_PIXEL_HEIGHT};  // 1
+                digit_src_rect[2] = SDL_Rect{.x = 78, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT};  // 2
+                digit_src_rect[3] = SDL_Rect{.x = 83, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT};  // 3
+                digit_src_rect[4] = SDL_Rect{.x = 88, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT};  // 4
+                digit_src_rect[5] = SDL_Rect{.x = 93, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT};  // 5
+                digit_src_rect[6] = SDL_Rect{.x = 98, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT};  // 6
+                digit_src_rect[7] = SDL_Rect{.x = 103, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT}; // 7
+                digit_src_rect[8] = SDL_Rect{.x = 108, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT}; // 8
+                digit_src_rect[9] = SDL_Rect{.x = 113, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT}; // 9
+
+                int divisor{100}; // TODO: rework using GAME_SCORE_CAP + 1
+                while (divisor > 0)
+                {
+                    if (m_game_state.score / divisor > 0)
+                    {
+                        // extract most significant digit
+                        int digit{divisor > 1 ? (m_game_state.score / divisor) : (m_game_state.score % 10)};
+
+                        // render it
+                        SDL_Rect src_rect{digit_src_rect.at(static_cast<size_t>(digit))};
+                        dst_rect.x += dst_rect.w + PIXEL_ADVANCE;
+                        dst_rect.w = src_rect.w;
+                        dst_rect.h = src_rect.h;
+                        SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
+                    }
+
+                    divisor /= 10;
+                }
+            }
+        }
     }
 
 private:
