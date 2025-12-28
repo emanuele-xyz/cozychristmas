@@ -965,21 +965,22 @@ public:
                 digit_src_rect[8] = SDL_Rect{.x = 108, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT}; // 8
                 digit_src_rect[9] = SDL_Rect{.x = 113, .y = 1, .w = 4, .h = SCORE_PIXEL_HEIGHT}; // 9
 
-                int divisor{100}; // TODO: rework using GAME_SCORE_CAP + 1
+                int divisor{100}; // Max score is the largest with 3 digits, i.e. 999.
                 while (divisor > 0)
                 {
+                    int digit{0};
                     if (m_game_state.score / divisor > 0)
                     {
                         // extract most significant digit
-                        int digit{divisor > 1 ? (m_game_state.score / divisor) : (m_game_state.score % 10)};
-
-                        // render it
-                        SDL_Rect src_rect{digit_src_rect.at(static_cast<size_t>(digit))};
-                        dst_rect.x += dst_rect.w + PIXEL_ADVANCE;
-                        dst_rect.w = src_rect.w;
-                        dst_rect.h = src_rect.h;
-                        SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
+                        digit = (m_game_state.score / divisor) % 10;
                     }
+
+                    // render it
+                    SDL_Rect src_rect{digit_src_rect.at(static_cast<size_t>(digit))};
+                    dst_rect.x += dst_rect.w + PIXEL_ADVANCE;
+                    dst_rect.w = src_rect.w;
+                    dst_rect.h = src_rect.h;
+                    SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
 
                     divisor /= 10;
                 }
