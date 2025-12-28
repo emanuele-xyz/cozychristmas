@@ -720,7 +720,7 @@ public:
             SDL_RenderFillRect(m_renderer, &myRect);
         }
 
-        constexpr int cozy_christmas_w{109};
+        constexpr int cozy_christmas_w{110};
         constexpr int cozy_christmas_h{44};
 
         SDL_Rect dst_rect{};
