@@ -26,6 +26,7 @@ constexpr double SPAWN_TIME_SEC_START{2.0};
 constexpr double SPAWN_TIME_DIFFICULTY_COEFFICIENT{0.01};
 constexpr double MIN_SPAWN_TIME_SEC{0.5};
 constexpr double SEC_PER_TICK{0.5};
+constexpr int MAX_SCORE{99};
 
 #define error(msg) \
     throw Error { __FILE__, __LINE__, (msg) }
@@ -91,46 +92,12 @@ static int random_int(int lo, int hi) noexcept
     return distribution(generator);
 }
 
-#if 0
-static constexpr const char *direction_to_str(Direction direction) noexcept
-{
-    const char *str{""};
-    switch (direction)
-    {
-    case DIRECTION_NORTH:
-    {
-        str = "NORTH";
-    }
-    break;
-    case DIRECTION_SOUTH:
-    {
-        str = "SOUTH";
-    }
-    break;
-    case DIRECTION_WEST:
-    {
-        str = "WEST";
-    }
-    break;
-    case DIRECTION_EAST:
-    {
-        str = "EAST";
-    }
-    break;
-    default:
-    {
-    }
-    }
-    return str;
-}
-#endif
-
 static int mod(int a, int b)
 {
     return (a % b + b) % b;
 }
 
-struct GameState
+struct SceneGameState
 {
     Tile map[MAP_SIDE][MAP_SIDE]{};
     Direction prev_tick_direction; // Santa's direction at the previous tick
@@ -139,9 +106,14 @@ struct GameState
     int num_bags;
     v2 first_bag;
     v2 last_bag;
-    int score;
     double spawn_time_sec{SPAWN_TIME_SEC_START};
     double spawn_timer{};
+};
+
+struct GameState
+{
+    SceneGameState scene;
+    int score;
 };
 
 struct SoundEffects
@@ -154,43 +126,37 @@ struct SoundEffects
     Mix_Chunk *spawn;
 };
 
-static void init_game_state(GameState &state)
-{
-    // TODO: default initialize map, direction, santa, num_bags, first_bag, last_bag, spwan time sec, spwan timer
-    state = GameState{};
-}
-
 static bool update_game_state(GameState &state, const SoundEffects &sfx)
 {
     bool game_over{false};
 
     // update previous tick direction
-    state.prev_tick_direction = state.cur_tick_direction;
+    state.scene.prev_tick_direction = state.scene.cur_tick_direction;
 
     // save old santa position for later
-    v2 old_santa{state.santa};
+    v2 old_santa{state.scene.santa};
 
     // move santa
-    switch (state.cur_tick_direction)
+    switch (state.scene.cur_tick_direction)
     {
     case DIRECTION_NORTH:
     {
-        state.santa.row = mod(state.santa.row - 1, MAP_SIDE);
+        state.scene.santa.row = mod(state.scene.santa.row - 1, MAP_SIDE);
     }
     break;
     case DIRECTION_SOUTH:
     {
-        state.santa.row = mod(state.santa.row + 1, MAP_SIDE);
+        state.scene.santa.row = mod(state.scene.santa.row + 1, MAP_SIDE);
     }
     break;
     case DIRECTION_WEST:
     {
-        state.santa.col = mod(state.santa.col - 1, MAP_SIDE);
+        state.scene.santa.col = mod(state.scene.santa.col - 1, MAP_SIDE);
     }
     break;
     case DIRECTION_EAST:
     {
-        state.santa.col = mod(state.santa.col + 1, MAP_SIDE);
+        state.scene.santa.col = mod(state.scene.santa.col + 1, MAP_SIDE);
     }
     break;
     default:
@@ -200,27 +166,27 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
     }
 
     // run custom logic based on which tile santa is on
-    switch (state.map[state.santa.row][state.santa.col].type)
+    switch (state.scene.map[state.scene.santa.row][state.scene.santa.col].type)
     {
     case TILE_EMPTY:
     {
         // if there are bags, employ logic to move them
-        if (state.num_bags > 0)
+        if (state.scene.num_bags > 0)
         {
             // make bag where santa was
-            state.map[old_santa.row][old_santa.col] = Tile{TILE_BAG};
+            state.scene.map[old_santa.row][old_santa.col] = Tile{TILE_BAG};
             // save old first bag location
-            v2 old_first_bag{state.first_bag};
+            v2 old_first_bag{state.scene.first_bag};
             // set new first bag location to where santa was
-            state.first_bag = old_santa;
+            state.scene.first_bag = old_santa;
             // update previous bag pointer for old fisrst bag
-            state.map[old_first_bag.row][old_first_bag.col] = Tile{TILE_BAG, old_santa.row, old_santa.col};
+            state.scene.map[old_first_bag.row][old_first_bag.col] = Tile{TILE_BAG, old_santa.row, old_santa.col};
             // save previous to last bag position
-            v2 previous_to_last_bag{state.map[state.last_bag.row][state.last_bag.col].prev_row, state.map[state.last_bag.row][state.last_bag.col].prev_col};
+            v2 previous_to_last_bag{state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col].prev_row, state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col].prev_col};
             // make empty tile where the last bag is
-            state.map[state.last_bag.row][state.last_bag.col] = Tile{TILE_EMPTY};
+            state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col] = Tile{TILE_EMPTY};
             // update last bag position to previos to last bag position
-            state.last_bag = previous_to_last_bag;
+            state.scene.last_bag = previous_to_last_bag;
         }
 
         // play step sound effect
@@ -230,24 +196,24 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
     case TILE_GIFT:
     {
         // make gift tile empty where santa is
-        state.map[state.santa.row][state.santa.col] = Tile{TILE_EMPTY};
+        state.scene.map[state.scene.santa.row][state.scene.santa.col] = Tile{TILE_EMPTY};
         // spawn bag where santa was
-        state.map[old_santa.row][old_santa.col] = Tile{TILE_BAG};
-        if (state.num_bags <= 0)
+        state.scene.map[old_santa.row][old_santa.col] = Tile{TILE_BAG};
+        if (state.scene.num_bags <= 0)
         {
             // set first and last bag positions to where santa was
-            state.first_bag = old_santa;
-            state.last_bag = old_santa;
+            state.scene.first_bag = old_santa;
+            state.scene.last_bag = old_santa;
         }
         else // state.num_bags > 0
         {
             // update former first bag previous pointer with the new first bag
-            state.map[state.first_bag.row][state.first_bag.col] = Tile{TILE_BAG, old_santa.row, old_santa.col};
+            state.scene.map[state.scene.first_bag.row][state.scene.first_bag.col] = Tile{TILE_BAG, old_santa.row, old_santa.col};
         }
         // update new first bag position
-        state.first_bag = old_santa;
+        state.scene.first_bag = old_santa;
         // increase number of bags
-        state.num_bags++;
+        state.scene.num_bags++;
 
         // play gift sound effect
         Mix_PlayChannel(-1, sfx.gift, 0);
@@ -260,7 +226,7 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
     break;
     case TILE_HOUSE:
     {
-        if (state.num_bags <= 0)
+        if (state.scene.num_bags <= 0)
         {
             game_over = true;
 
@@ -270,34 +236,36 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
         else // state.num_bags > 0
         {
             // make house tile empty where santa is
-            state.map[state.santa.row][state.santa.col] = Tile{TILE_EMPTY};
+            state.scene.map[state.scene.santa.row][state.scene.santa.col] = Tile{TILE_EMPTY};
             // save last bag tile
-            Tile saved = state.map[state.last_bag.row][state.last_bag.col];
+            Tile saved = state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col];
             // remove last bag tile
-            state.map[state.last_bag.row][state.last_bag.col] = Tile{TILE_EMPTY};
-            if (state.num_bags > 1)
+            state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col] = Tile{TILE_EMPTY};
+            if (state.scene.num_bags > 1)
             {
                 // update last bag
-                state.last_bag = v2{saved.prev_row, saved.prev_col};
+                state.scene.last_bag = v2{saved.prev_row, saved.prev_col};
                 // spawn bag where santa was
-                state.map[old_santa.row][old_santa.col] = Tile{TILE_BAG};
+                state.scene.map[old_santa.row][old_santa.col] = Tile{TILE_BAG};
                 // save former first bag
-                v2 old_first_bag = state.first_bag;
+                v2 old_first_bag = state.scene.first_bag;
                 // update new first bag position
-                state.first_bag = old_santa;
+                state.scene.first_bag = old_santa;
                 // update former first bag previous pointer with the new first bag
-                state.map[old_first_bag.row][old_first_bag.col] = Tile{TILE_BAG, state.first_bag.row, state.first_bag.col};
+                state.scene.map[old_first_bag.row][old_first_bag.col] = Tile{TILE_BAG, state.scene.first_bag.row, state.scene.first_bag.col};
                 // save previous to last bag
-                Tile last_bag{state.map[state.last_bag.row][state.last_bag.col]};
+                Tile last_bag{state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col]};
                 // remove last bag tile
-                state.map[state.last_bag.row][state.last_bag.col] = Tile{TILE_EMPTY};
+                state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col] = Tile{TILE_EMPTY};
                 // update last bag position
-                state.last_bag = v2{last_bag.prev_row, last_bag.prev_col};
+                state.scene.last_bag = v2{last_bag.prev_row, last_bag.prev_col};
             }
             // decrease number of bags
-            state.num_bags--;
+            state.scene.num_bags--;
             // increase the number of successfully delivered gifts
             state.score++;
+            // if the player reaches the maximum allowed score, the game is over
+            game_over = (state.score == MAX_SCORE);
 
             // play house sound effect
             Mix_PlayChannel(-1, sfx.house, 0);
@@ -311,7 +279,7 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
     }
 
     // when spawn timer sets off, either spawn a gift or a house
-    if (state.spawn_timer >= state.spawn_time_sec)
+    if (state.scene.spawn_timer >= state.scene.spawn_time_sec)
     {
         // spawning logic
         {
@@ -320,8 +288,8 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
             {
                 for (int col{}; col < MAP_SIDE; col++)
                 {
-                    bool is_santa_on_tile{state.santa.row == row && state.santa.col == col};
-                    if (state.map[row][col].type == TILE_EMPTY && !is_santa_on_tile)
+                    bool is_santa_on_tile{state.scene.santa.row == row && state.scene.santa.col == col};
+                    if (state.scene.map[row][col].type == TILE_EMPTY && !is_santa_on_tile)
                     {
                         empty_tiles.emplace_back(row, col);
                     }
@@ -334,7 +302,7 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
                 int size{static_cast<int>(empty_tiles.size())};
                 size_t idx{static_cast<size_t>(random_int(0, size - 1))};
                 v2 random_tile{empty_tiles[idx]};
-                state.map[random_tile.row][random_tile.col] = Tile{random_int(1, 100) <= 50 ? TILE_GIFT : TILE_HOUSE};
+                state.scene.map[random_tile.row][random_tile.col] = Tile{random_int(1, 100) <= 50 ? TILE_GIFT : TILE_HOUSE};
 
                 // play spawn sound
                 Mix_PlayChannel(-1, sfx.spawn, 0);
@@ -342,110 +310,15 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
         }
 
         // make spawn time a little shorter (to make game harder)
-        state.spawn_time_sec -= SPAWN_TIME_DIFFICULTY_COEFFICIENT * state.spawn_time_sec;
+        state.scene.spawn_time_sec -= SPAWN_TIME_DIFFICULTY_COEFFICIENT * state.scene.spawn_time_sec;
         // make sure spawn time doesn't go below the fixed minimum
-        state.spawn_time_sec = std::max(state.spawn_time_sec, MIN_SPAWN_TIME_SEC);
+        state.scene.spawn_time_sec = std::max(state.scene.spawn_time_sec, MIN_SPAWN_TIME_SEC);
         // reset timer
-        state.spawn_timer = 0.0;
+        state.scene.spawn_timer = 0.0;
     }
 
     return game_over;
 }
-
-#if 0
-static void entry()
-{
-    GameState game_state{};
-    init_game_state(game_state);
-
-    while (!game_state.game_over)
-    {
-        // render game state
-        {
-            for (int i{}; i < MAP_SIDE; i++)
-            {
-                for (int j{}; j < MAP_SIDE; j++)
-                {
-                    // if the tile is the one of which santa is, render santa
-                    if (game_state.santa.row == i && game_state.santa.col == j)
-                    {
-                        std::cout << '<';
-                    }
-                    else // otherwise, render the tile
-                    {
-                        switch (game_state.map[i][j].type)
-                        {
-                        case TILE_EMPTY:
-                            std::cout << '.';
-                            break;
-                        case TILE_BAG:
-                            std::cout << '@';
-                            break;
-                        case TILE_GIFT:
-                            std::cout << '$';
-                            break;
-                        case TILE_HOUSE:
-                            std::cout << '^';
-                            break;
-                        default:
-                            unreachable();
-                        }
-                    }
-                }
-                std::cout << "\n";
-            }
-
-            std::cout << "direction: " << direction_to_str(game_state.cur_tick_direction) << '\n';
-            std::cout << "Santa: " << game_state.santa.row << ',' << game_state.santa.col << '\n';
-            std::cout << "Bags: " << game_state.num_bags << '\n';
-            std::cout << "First bag: " << game_state.first_bag.row << ',' << game_state.first_bag.col << '\n';
-            std::cout << "Last bag: " << game_state.last_bag.row << ',' << game_state.last_bag.col << '\n';
-        }
-
-        // get input for current tick
-        char direction_input{};
-        std::cout << "action: ";
-        std::cin >> direction_input;
-
-        // translate input to direction or exit
-        Direction direction{};
-        switch (direction_input)
-        {
-        case 'n':
-        {
-            direction = DIRECTION_NORTH;
-        }
-        break;
-        case 's':
-        {
-            direction = DIRECTION_SOUTH;
-        }
-        break;
-        case 'e':
-        {
-            direction = DIRECTION_EAST;
-        }
-        break;
-        case 'w':
-        {
-            direction = DIRECTION_WEST;
-        }
-        break;
-        default:
-        {
-            game_state.game_over = true;
-        }
-        break;
-        }
-
-        // update game state with new direct
-        game_state.cur_tick_direction = direction;
-
-        // update game state
-        update_game_state(game_state);
-    }
-}
-#endif
 
 class SDL2ExHandle
 {
@@ -681,6 +554,7 @@ private:
 class IScene
 {
 public:
+    virtual void on_event(const SDL_Event &) {}
     virtual bool update(double dt_sec) = 0;
     virtual void render() = 0;
 
@@ -688,21 +562,35 @@ public:
     virtual ~IScene() noexcept = default;
 };
 
-class GameOverScene : public IScene
+class GameStartScene : public IScene
 {
 public:
-    GameOverScene(GameState &game_state, SDL_Renderer *renderer, SDL_Texture *sprite_sheet) noexcept
-        : m_game_state{game_state}, m_renderer{renderer}, m_sprite_sheet{sprite_sheet} {}
-    ~GameOverScene() noexcept override = default;
-    GameOverScene(const GameOverScene &) noexcept = delete;
-    GameOverScene(GameOverScene &&) noexcept = delete;
-    GameOverScene &operator=(const GameOverScene &) noexcept = delete;
-    GameOverScene &operator=(GameOverScene &&) noexcept = delete;
+    GameStartScene(GameState &game_state, SDL_Renderer *renderer, SDL_Texture *sprite_sheet, const SoundEffects &sfx) noexcept
+        : m_game_state{game_state}, m_renderer{renderer}, m_sprite_sheet{sprite_sheet}, m_sfx{sfx}, m_game_over{false} {}
+    ~GameStartScene() noexcept override = default;
+    GameStartScene(const GameStartScene &) noexcept = delete;
+    GameStartScene(GameStartScene &&) noexcept = delete;
+    GameStartScene &operator=(const GameStartScene &) noexcept = delete;
+    GameStartScene &operator=(GameStartScene &&) noexcept = delete;
 
 public:
-    bool update(double /*dt_sec*/) override
+    void on_event(const SDL_Event &event) override
     {
-        return true;
+        if (event.type == SDL_KEYDOWN)
+        {
+            // key presses events
+            if (event.key.keysym.sym == SDLK_RETURN)
+            {
+                m_game_over = true;
+                Mix_PlayChannel(-1, m_sfx.start, 0);
+            }
+        }
+    }
+    bool update(double /*dt*/) override
+    {
+        bool tmp{m_game_over};
+        m_game_over = false;
+        return tmp;
     }
     void render() override
     {
@@ -720,28 +608,79 @@ public:
             SDL_RenderFillRect(m_renderer, &myRect);
         }
 
-        constexpr int cozy_christmas_w{110};
-        constexpr int cozy_christmas_h{44};
+        // draw cozy christmas logo
+        {
+            constexpr int cozy_christmas_w{110};
+            constexpr int cozy_christmas_h{44};
 
-        SDL_Rect dst_rect{};
-        dst_rect.x = (LOGICAL_SCREEN_W / 2) - (cozy_christmas_w / 2);
-        dst_rect.y = (LOGICAL_SCREEN_H / 2) - (cozy_christmas_h / 2);
-        dst_rect.w = cozy_christmas_w;
-        dst_rect.h = cozy_christmas_h;
+            SDL_Rect dst_rect{};
+            dst_rect.x = (LOGICAL_SCREEN_W / 2) - (cozy_christmas_w / 2);
+            dst_rect.y = (LOGICAL_SCREEN_H / 2) - (cozy_christmas_h / 2);
+            dst_rect.w = cozy_christmas_w;
+            dst_rect.h = cozy_christmas_h;
 
-        SDL_Rect src_rect{};
-        src_rect.x = 8;
-        src_rect.y = 33;
-        src_rect.w = cozy_christmas_w;
-        src_rect.h = cozy_christmas_h;
+            SDL_Rect src_rect{};
+            src_rect.x = 8;
+            src_rect.y = 33;
+            src_rect.w = cozy_christmas_w;
+            src_rect.h = cozy_christmas_h;
 
-        SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
+            SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
+        }
     }
 
-private:
-    [[maybe_unused]] GameState &m_game_state; // TODO: remove [[maybe_unused]]
+protected:
+    GameState &m_game_state;
     SDL_Renderer *m_renderer;
     SDL_Texture *m_sprite_sheet;
+    const SoundEffects &m_sfx;
+    bool m_game_over;
+};
+
+class EndGameScene : public GameStartScene
+{
+public:
+    EndGameScene(GameState &game_state, SDL_Renderer *renderer, SDL_Texture *sprite_sheet, const SoundEffects &sfx) noexcept
+        : GameStartScene{game_state, renderer, sprite_sheet, sfx} {}
+    ~EndGameScene() noexcept override = default;
+    EndGameScene(const EndGameScene &) noexcept = delete;
+    EndGameScene(EndGameScene &&) noexcept = delete;
+    EndGameScene &operator=(const EndGameScene &) noexcept = delete;
+    EndGameScene &operator=(EndGameScene &&) noexcept = delete;
+
+public:
+    void render() override
+    {
+        GameStartScene::render();
+
+        // either draw you won or you lost
+        {
+            SDL_Rect src_rect{};
+            SDL_Rect dst_rect{};
+
+            if (m_game_state.score == MAX_SCORE) // won
+            {
+                src_rect.x = 37;
+                src_rect.y = 96;
+                src_rect.w = 84 - 37;
+                src_rect.h = 105 - 96;
+            }
+            else // lost
+            {
+                src_rect.x = 32;
+                src_rect.y = 82;
+                src_rect.w = 93 - 32;
+                src_rect.h = 91 - 82;
+            }
+
+            dst_rect.x = (LOGICAL_SCREEN_W / 2) - (src_rect.w / 2);
+            dst_rect.y = LOGICAL_SCREEN_H - src_rect.h * 2;
+            dst_rect.w = src_rect.w;
+            dst_rect.h = src_rect.h;
+
+            SDL_RenderCopy(m_renderer, m_sprite_sheet, &src_rect, &dst_rect);
+        }
+    }
 };
 
 class GameScene : public IScene
@@ -768,33 +707,33 @@ public:
             if (keyboard[SDL_SCANCODE_W] || keyboard[SDL_SCANCODE_UP])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.prev_tick_direction == DIRECTION_SOUTH && m_game_state.num_bags > 0))
+                if (!(m_game_state.scene.prev_tick_direction == DIRECTION_SOUTH && m_game_state.scene.num_bags > 0))
                 {
-                    m_game_state.cur_tick_direction = DIRECTION_NORTH;
+                    m_game_state.scene.cur_tick_direction = DIRECTION_NORTH;
                 }
             }
             if (keyboard[SDL_SCANCODE_S] || keyboard[SDL_SCANCODE_DOWN])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.prev_tick_direction == DIRECTION_NORTH && m_game_state.num_bags > 0))
+                if (!(m_game_state.scene.prev_tick_direction == DIRECTION_NORTH && m_game_state.scene.num_bags > 0))
                 {
-                    m_game_state.cur_tick_direction = DIRECTION_SOUTH;
+                    m_game_state.scene.cur_tick_direction = DIRECTION_SOUTH;
                 }
             }
             if (keyboard[SDL_SCANCODE_A] || keyboard[SDL_SCANCODE_LEFT])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.prev_tick_direction == DIRECTION_EAST && m_game_state.num_bags > 0))
+                if (!(m_game_state.scene.prev_tick_direction == DIRECTION_EAST && m_game_state.scene.num_bags > 0))
                 {
-                    m_game_state.cur_tick_direction = DIRECTION_WEST;
+                    m_game_state.scene.cur_tick_direction = DIRECTION_WEST;
                 }
             }
             if (keyboard[SDL_SCANCODE_D] || keyboard[SDL_SCANCODE_RIGHT])
             {
                 // santa cannot go in the opposite direction while carrying bags, otherwise he would die
-                if (!(m_game_state.prev_tick_direction == DIRECTION_WEST && m_game_state.num_bags > 0))
+                if (!(m_game_state.scene.prev_tick_direction == DIRECTION_WEST && m_game_state.scene.num_bags > 0))
                 {
-                    m_game_state.cur_tick_direction = DIRECTION_EAST;
+                    m_game_state.scene.cur_tick_direction = DIRECTION_EAST;
                 }
             }
         }
@@ -809,7 +748,7 @@ public:
         }
 
         // update spawn timer
-        m_game_state.spawn_timer += dt_sec;
+        m_game_state.scene.spawn_timer += dt_sec;
 
         // update tick timer
         m_tick_timer += dt_sec;
@@ -850,7 +789,7 @@ public:
 
                 bool should_render{true};
 
-                switch (m_game_state.map[row][col].type)
+                switch (m_game_state.scene.map[row][col].type)
                 {
                 case TILE_GIFT:
                 {
@@ -881,8 +820,8 @@ public:
                 if (should_render)
                 {
                     SDL_RendererFlip horizontal_flip = SDL_FLIP_NONE;
-                    if (m_game_state.cur_tick_direction == DIRECTION_EAST &&
-                        m_game_state.map[row][col].type == TILE_BAG)
+                    if (m_game_state.scene.cur_tick_direction == DIRECTION_EAST &&
+                        m_game_state.scene.map[row][col].type == TILE_BAG)
                     {
                         horizontal_flip = SDL_FLIP_HORIZONTAL;
                     }
@@ -902,8 +841,8 @@ public:
         // render santa
         {
             SDL_Rect dst_rect{};
-            dst_rect.x = m_game_state.santa.col * TILE_PIXEL_SIZE;
-            dst_rect.y = m_game_state.santa.row * TILE_PIXEL_SIZE;
+            dst_rect.x = m_game_state.scene.santa.col * TILE_PIXEL_SIZE;
+            dst_rect.y = m_game_state.scene.santa.row * TILE_PIXEL_SIZE;
             dst_rect.w = TILE_PIXEL_SIZE;
             dst_rect.h = TILE_PIXEL_SIZE;
 
@@ -914,7 +853,7 @@ public:
             src_rect.h = TILE_PIXEL_SIZE;
 
             SDL_RendererFlip horizontal_flip = SDL_FLIP_NONE;
-            if (m_game_state.cur_tick_direction == DIRECTION_EAST)
+            if (m_game_state.scene.cur_tick_direction == DIRECTION_EAST)
             {
                 horizontal_flip = SDL_FLIP_HORIZONTAL;
             }
@@ -1037,7 +976,6 @@ entry()
 
     bool should_exit{false};
     GameState game_state{};
-    init_game_state(game_state);
 
     SoundEffects sfx{start.Handle(), gift.Handle(), house.Handle(), hurt.Handle(), step.Handle(), spawn.Handle()};
 
@@ -1045,13 +983,14 @@ entry()
     Mix_PlayMusic(theme.Handle(), -1);
     Mix_VolumeMusic(16); // [0,128] // TODO: not here
 
+    GameStartScene game_start{game_state, renderer.Handle(), sprite_sheet.Handle(), sfx};
     GameScene game_scene{game_state, renderer.Handle(), sprite_sheet.Handle(), sfx};
-    GameOverScene game_over_scene{game_state, renderer.Handle(), sprite_sheet.Handle()};
-    // IScene *current_scene{&game_over_scene};
-    IScene *current_scene{&game_scene};
+    EndGameScene end_game_scene{game_state, renderer.Handle(), sprite_sheet.Handle(), sfx};
+    std::array<IScene *, 3> scenes{&game_start, &game_scene, &end_game_scene};
+    int current_scene_idx{};
 
     Uint64 last_frame_start{SDL_GetPerformanceCounter()};
-    bool game_over{true};
+    bool game_over{};
     while (!should_exit)
     {
         // compute last frame delta time
@@ -1075,12 +1014,6 @@ entry()
                     // key presses events
                     switch (e.key.keysym.sym)
                     {
-                    case SDLK_RETURN:
-                    {
-                        Mix_PlayChannel(-1, sfx.start, 0);
-                        game_over = false;
-                    }
-                    break;
                     case SDLK_ESCAPE:
                     {
                         should_exit = true;
@@ -1092,25 +1025,40 @@ entry()
                     }
                     }
                 }
+
+                IScene *scene{scenes[static_cast<size_t>(current_scene_idx)]};
+                scene->on_event(e);
             }
         }
 
         // switch scene
         if (game_over)
         {
-            init_game_state(game_state);
-            current_scene = &game_over_scene;
+            game_state.scene = SceneGameState{};
+            current_scene_idx = (current_scene_idx + 1) % static_cast<int>(scenes.size());
+            current_scene_idx = current_scene_idx == 0 ? current_scene_idx + 1 : current_scene_idx;
+
+            // if the upcoming scene is the game scene we reset the score
+            if (auto it{std::find(scenes.begin(), scenes.end(), &game_scene)}; it != scenes.end())
+            {
+                int game_scene_idx{static_cast<int>(std::distance(scenes.begin(), it))};
+                if (current_scene_idx == game_scene_idx)
+                {
+                    game_state.score = 0;
+                }
+            }
+            else
+            {
+                error("unable to find game scene in scenes array");
+            }
         }
-        else
+
+        // update and render current scene
         {
-            current_scene = &game_scene;
+            IScene *scene{scenes[static_cast<size_t>(current_scene_idx)]};
+            game_over = scene->update(dt_sec);
+            scene->render();
         }
-
-        // update scene
-        game_over = current_scene->update(dt_sec);
-
-        // render scene
-        current_scene->render();
 
         // present
         SDL_RenderPresent(renderer.Handle());
