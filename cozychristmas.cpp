@@ -25,9 +25,12 @@ constexpr int SCORE_PIXEL_HEIGHT{7};
 constexpr int LOGICAL_SCREEN_W{MAP_SIDE * TILE_PIXEL_SIZE};
 constexpr int LOGICAL_SCREEN_H{MAP_SIDE * TILE_PIXEL_SIZE + SCORE_PIXEL_PAD + SCORE_PIXEL_HEIGHT};
 constexpr double SPAWN_TIME_SEC_START{2.0};
-constexpr double SPAWN_TIME_DIFFICULTY_COEFFICIENT{0.01};
+constexpr double SPAWN_TIME_DIFFICULTY_COEFFICIENT{0.01}; // decrease by % of the current spawn time
 constexpr double MIN_SPAWN_TIME_SEC{0.5};
-constexpr double SEC_PER_TICK{0.5};
+constexpr double SEC_PER_TICK_START{0.5};
+constexpr double SEC_PER_TICK_DIFFICULTY_COEFFICIENT{0.001}; // decrease by % of the current sec per tick
+constexpr double MIN_SEC_PER_TICK{0.375};
+
 constexpr int MAX_SCORE{99};
 
 #define error(msg) \
@@ -766,7 +769,7 @@ class GameScene : public IScene
 {
 public:
     GameScene(GameState &game_state, SDL_Renderer *renderer, SDL_Texture *sprite_sheet, const SoundEffects &sfx) noexcept
-        : m_game_state{game_state}, m_renderer{renderer}, m_sprite_sheet{sprite_sheet}, m_sfx{sfx}, m_tick_timer{SEC_PER_TICK}
+        : m_game_state{game_state}, m_renderer{renderer}, m_sprite_sheet{sprite_sheet}, m_sfx{sfx}, m_sec_per_tick{SEC_PER_TICK_START}, m_tick_timer{SEC_PER_TICK_START}
     {
     }
     ~GameScene() noexcept override = default;
@@ -818,10 +821,13 @@ public:
         }
 
         // update and render game state
-        if (m_tick_timer >= SEC_PER_TICK)
+        if (m_tick_timer >= m_sec_per_tick)
         {
             // update game
             game_over = update_game_state(m_game_state, m_sfx);
+            // decrease sec per tick
+            m_sec_per_tick -= m_sec_per_tick * SEC_PER_TICK_DIFFICULTY_COEFFICIENT;
+            m_sec_per_tick = std::max(MIN_SEC_PER_TICK, m_sec_per_tick);
             // reset timer
             m_tick_timer = 0.0;
         }
@@ -1011,6 +1017,7 @@ private:
     SDL_Renderer *m_renderer;
     SDL_Texture *m_sprite_sheet;
     const SoundEffects &m_sfx;
+    double m_sec_per_tick;
     double m_tick_timer;
 };
 
