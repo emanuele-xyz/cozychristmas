@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <format>
@@ -39,6 +41,89 @@ public:
     Error(const char *file, int line, const std::string &message)
         : std::runtime_error{std::format("{}({}): {}\n{}", file, line, message, std::to_string(std::stacktrace::current(1)))}
     {
+    }
+};
+
+// used for seeding xoshiro256**
+// ref: https://xorshift.di.unimi.it/splitmix64.c
+class SplitMix64
+{
+public:
+    SplitMix64(uint64_t seed) : x(seed) {}
+
+    uint64_t next()
+    {
+        uint64_t z = (x += 0x9e3779b97f4a7c15);
+        z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+        z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+        return z ^ (z >> 31);
+    }
+
+private:
+    uint64_t x;
+};
+
+// ref: https://prng.di.unimi.it/xoshiro256starstar.c
+class Xoshiro256StarStar
+{
+public:
+    Xoshiro256StarStar(uint64_t seed)
+    {
+        SplitMix64 splitmix{seed};
+        s[0] = splitmix.next();
+        s[1] = splitmix.next();
+        s[2] = splitmix.next();
+        s[3] = splitmix.next();
+    }
+
+    // default constructor, seed with current time
+    Xoshiro256StarStar() : Xoshiro256StarStar(static_cast<uint64_t>(std::chrono::high_resolution_clock::now()
+                                                                        .time_since_epoch()
+                                                                        .count())) {}
+
+    uint64_t next()
+    {
+        const uint64_t result = rotl(s[1] * 5, 7) * 9;
+
+        const uint64_t t = s[1] << 17;
+
+        s[2] ^= s[0];
+        s[3] ^= s[1];
+        s[1] ^= s[2];
+        s[0] ^= s[3];
+
+        s[2] ^= t;
+
+        s[3] = rotl(s[3], 45);
+
+        return result;
+    }
+
+    // generate random integer in range [a, b] (inclusive)
+    int64_t range(int64_t a, int64_t b)
+    {
+        assert(a <= b);
+        uint64_t range = static_cast<uint64_t>(b - a) + 1;
+
+        // use rejection sampling to avoid modulo bias
+        // ref: https://github.com/openbsd/src/blob/master/lib/libc/crypt/arc4random_uniform.c
+        uint64_t threshold = -range % range;
+        uint64_t r;
+
+        do
+        {
+            r = next();
+        } while (r < threshold);
+
+        return a + static_cast<int64_t>(r % range);
+    }
+
+private:
+    uint64_t s[4];
+
+    static inline uint64_t rotl(const uint64_t x, int k)
+    {
+        return (x << k) | (x >> (64 - k));
     }
 };
 
@@ -82,14 +167,8 @@ enum Direction : uint8_t
 
 static int random_int(int lo, int hi) noexcept
 {
-    // TODO: there should be a cleaner solution here, but right now I don't care enough
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-    static std::random_device random_device{};
-#pragma clang diagnostic pop
-    static std::mt19937 generator{random_device()};
-    std::uniform_int_distribution<> distribution{lo, hi}; // from 'lo' included to 'hi' included
-    return distribution(generator);
+    static Xoshiro256StarStar prng{}; // TODO - static or new seed each new game?
+    return static_cast<int>(prng.range(lo, hi));
 }
 
 static int mod(int a, int b)
