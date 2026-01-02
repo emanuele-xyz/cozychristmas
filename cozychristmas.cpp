@@ -776,8 +776,8 @@ public:
     ~GameScene() noexcept override = default;
     GameScene(const GameScene &) noexcept = delete;
     GameScene(GameScene &&) noexcept = delete;
-    GameScene operator=(const GameScene &) noexcept = delete;
-    GameScene operator=(GameScene &&) noexcept = delete;
+    GameScene &operator=(const GameScene &) noexcept = delete;
+    GameScene &operator=(GameScene &&) noexcept = delete;
 
 public:
     void reset() override
