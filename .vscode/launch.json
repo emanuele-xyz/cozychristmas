@@ -8,7 +8,7 @@
             "name": "Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/cozychristmas",
+            "program": "${workspaceFolder}/debug",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
