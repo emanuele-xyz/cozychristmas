@@ -25,4 +25,4 @@ To build the game you can simply run `make` for the release version and
 
 ## Screenshot
 
-![](screenshot.png)
+<img src="screenshot.png" height="500">
