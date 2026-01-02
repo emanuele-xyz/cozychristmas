@@ -11,7 +11,6 @@
 #include <format>
 #include <random>
 #include <stacktrace>
-#include <stacktrace>
 #include <string>
 #include <stdexcept>
 #include <vector>
@@ -19,7 +18,7 @@
 constexpr int SCREEN_W{720};
 constexpr int SCREEN_H{720};
 constexpr int MAP_SIDE{8};
-constexpr int TILE_PIXEL_SIZE{14}; // TODO: find a better name
+constexpr int TILE_PIXEL_SIZE{14};
 constexpr int SCORE_PIXEL_PAD{1};
 constexpr int SCORE_PIXEL_HEIGHT{7};
 constexpr int LOGICAL_SCREEN_W{MAP_SIDE * TILE_PIXEL_SIZE};
@@ -170,7 +169,7 @@ enum Direction : uint8_t
 
 static int random_int(int lo, int hi) noexcept
 {
-    static Xoshiro256StarStar prng{}; // TODO - static or new seed each new game?
+    static Xoshiro256StarStar prng{};
     return static_cast<int>(prng.range(lo, hi));
 }
 
@@ -320,7 +319,7 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
             // make house tile empty where santa is
             state.scene.map[state.scene.santa.row][state.scene.santa.col] = Tile{TILE_EMPTY};
             // save last bag tile
-            Tile saved = state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col];
+            Tile saved{state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col]};
             // remove last bag tile
             state.scene.map[state.scene.last_bag.row][state.scene.last_bag.col] = Tile{TILE_EMPTY};
             if (state.scene.num_bags > 1)
@@ -330,7 +329,7 @@ static bool update_game_state(GameState &state, const SoundEffects &sfx)
                 // spawn bag where santa was
                 state.scene.map[old_santa.row][old_santa.col] = Tile{TILE_BAG};
                 // save former first bag
-                v2 old_first_bag = state.scene.first_bag;
+                v2 old_first_bag{state.scene.first_bag};
                 // update new first bag position
                 state.scene.first_bag = old_santa;
                 // update former first bag previous pointer with the new first bag
@@ -636,6 +635,7 @@ private:
 class IScene
 {
 public:
+    virtual void reset() {}
     virtual void on_event(const SDL_Event &) {}
     virtual bool update(double dt_sec) = 0;
     virtual void render() = 0;
@@ -769,8 +769,9 @@ class GameScene : public IScene
 {
 public:
     GameScene(GameState &game_state, SDL_Renderer *renderer, SDL_Texture *sprite_sheet, const SoundEffects &sfx) noexcept
-        : m_game_state{game_state}, m_renderer{renderer}, m_sprite_sheet{sprite_sheet}, m_sfx{sfx}, m_sec_per_tick{SEC_PER_TICK_START}, m_tick_timer{SEC_PER_TICK_START}
+        : m_game_state{game_state}, m_renderer{renderer}, m_sprite_sheet{sprite_sheet}, m_sfx{sfx}, m_sec_per_tick{}, m_tick_timer{}
     {
+        reset();
     }
     ~GameScene() noexcept override = default;
     GameScene(const GameScene &) noexcept = delete;
@@ -779,6 +780,11 @@ public:
     GameScene operator=(GameScene &&) noexcept = delete;
 
 public:
+    void reset() override
+    {
+        m_sec_per_tick = SEC_PER_TICK_START;
+        m_tick_timer = SEC_PER_TICK_START;
+    }
     bool update(double dt_sec) override
     {
         bool game_over{false};
@@ -1021,8 +1027,7 @@ private:
     double m_tick_timer;
 };
 
-static int
-entry()
+static int entry()
 {
     // ------------------------------------------------------------------------
     // sdl2 initialization
@@ -1067,7 +1072,7 @@ entry()
 
     // start playing music (loops: -1 = infinite)
     Mix_PlayMusic(theme.Handle(), -1);
-    Mix_VolumeMusic(16); // [0,128] // TODO: not here
+    Mix_VolumeMusic(16); // [0,128]
 
     GameStartScene game_start{game_state, renderer.Handle(), sprite_sheet.Handle(), sfx};
     GameScene game_scene{game_state, renderer.Handle(), sprite_sheet.Handle(), sfx};
@@ -1087,7 +1092,7 @@ entry()
         // process input
         {
             // run message pump
-            SDL_Event e;
+            SDL_Event e{};
             while (SDL_PollEvent(&e) != 0)
             {
                 if (e.type == SDL_QUIT)
@@ -1137,6 +1142,10 @@ entry()
             {
                 error("unable to find game scene in scenes array");
             }
+
+            // reset current scene
+            IScene *scene{scenes[static_cast<size_t>(current_scene_idx)]};
+            scene->reset();
         }
 
         // update and render current scene
@@ -1164,5 +1173,5 @@ int main()
         std::cerr << error.what() << "\n";
     }
 
-    return 1;
+    return 0;
 }
