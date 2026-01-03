@@ -101,14 +101,52 @@ public:
         return result;
     }
 
-    // generate random integer in range [a, b] (inclusive)
-    int64_t range(int64_t a, int64_t b)
+    // Generate a random integer in range [a, b] (inclusive)
+    //
+    // When you want a random number in range [a, b], the naive approach is:
+    //   a + (next() % range)
+    // The modulo creates a bias, some numbers will appear more frequently than others.
+    //
+    // Let's use an example, suppose the PRNG generates numbers [0, 9], and you want a
+    // random number in range [0, 3].
+    //
+    // Applying the modulo 4 on each number from 0 to 9 we obtain the following:
+    //
+    //  0 appears 3 times (30%)
+    //  1 appears 3 times (30%)
+    //  2 appears 2 times (20%)
+    //  3 appears 2 times (20%)
+    //
+    // This is not uniform, values 0 and 1 are 50% more likely than 2 and 3.
+    //
+    // For a 64-bit PRNG generating values in [0, 2^64-1], when we want range of size R:
+    //
+    //   Total possible values: 2^64
+    //   Range size: R = b - a + 1
+    //   Complete cycles: ⌊2^64 / R⌋
+    //   Remainder (extra values): 2^64 mod R
+    //
+    // The first (2^64 mod R) values in the range get mapped one extra time compared to
+    // the others, creating bias.
+    //
+    // The idea is simple: reject values that would cause bias.
+    int64_t
+    range(int64_t a, int64_t b)
     {
         assert(a <= b);
         uint64_t range = static_cast<uint64_t>(b - a) + 1;
 
         // use rejection sampling to avoid modulo bias
         // ref: https://github.com/openbsd/src/blob/master/lib/libc/crypt/arc4random_uniform.c
+        //
+        // -range % range computes (2^64 - range) % range without requiring 128-bit integers.
+        //
+        // This in turn equals to 2^64 % range (the number of "extra" values that cause bias).
+        //
+        // Why it works:
+        //  - In unsigned arithmetic, -range wraps around to 2^64 - range
+        //  - (2^64 - range) % range = 2^64 % range
+        //  - This gives us the size of the "bias zone" at the beginning
         uint64_t threshold = -range % range;
         uint64_t r;
 
