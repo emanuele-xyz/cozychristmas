@@ -23,6 +23,15 @@ presents you win!
 To build the game you can simply run `make` for the release version and
 `make debug` for the debug version.
 
+## Gameplay
+
+A short video of the gameplay can be found
+[here](https://www.youtube.com/watch?v=a6M8I37DpwM).
+
+## License
+
+The source code is licensed under the MIT License.
+
 ## Screenshot
 
 <img src="screenshot.png" height="500">
